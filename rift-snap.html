@@ -1,0 +1,1132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RIFT//SNAP — hand-tracked reality glitch</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#05060a; --panel:rgba(10,12,20,.72); --line:rgba(140,160,255,.18);
+    --violet:#a24bff; --violet2:#d9a6ff; --cyan:#38e8ff; --amber:#ffb547; --red:#ff4d6d;
+    --text:#e8ecff; --dim:#8a93b8;
+    --display:'Chakra Petch', 'Segoe UI', system-ui, sans-serif;
+    --mono:'JetBrains Mono', ui-monospace, Consolas, monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:var(--display);overflow:hidden}
+  #stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:
+    radial-gradient(ellipse at 50% 40%, #0d1020 0%, #05060a 70%)}
+  #out{width:100vw;height:100vh;object-fit:contain;display:block}
+  #cam{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+
+  /* ---------- HUD ---------- */
+  .hud{position:fixed;pointer-events:none;z-index:5;opacity:0;transition:opacity .6s}
+  body.live .hud{opacity:1}
+  #brand{top:18px;left:22px}
+  #brand .logo{font-weight:700;font-size:22px;letter-spacing:.18em}
+  #brand .logo b{color:var(--violet)}
+  #brand .sub{font-family:var(--mono);font-size:11px;color:var(--dim);letter-spacing:.12em;margin-top:2px}
+  #chips{top:18px;right:22px;display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;max-width:60vw}
+  .chip{font-family:var(--mono);font-size:11px;letter-spacing:.1em;padding:6px 10px;border:1px solid var(--line);
+    background:var(--panel);backdrop-filter:blur(6px);border-radius:3px;display:flex;align-items:center;gap:7px;white-space:nowrap}
+  .chip i{width:7px;height:7px;border-radius:50%;background:#3a3f55;display:inline-block;box-shadow:none}
+  .chip.on.rift i{background:var(--violet);box-shadow:0 0 10px var(--violet)}
+  .chip.on.armor i{background:var(--amber);box-shadow:0 0 10px var(--amber)}
+  .chip.on.ok i{background:var(--cyan);box-shadow:0 0 10px var(--cyan)}
+  .chip.warn i{background:var(--red);box-shadow:0 0 10px var(--red)}
+  .chip.on.rift{border-color:rgba(162,75,255,.6)} .chip.on.armor{border-color:rgba(255,181,71,.6)}
+
+  #guide{left:22px;bottom:20px;font-size:13px;line-height:1.55;background:var(--panel);border:1px solid var(--line);
+    padding:12px 14px;border-radius:4px;backdrop-filter:blur(6px);max-width:330px}
+  #guide .row{display:flex;gap:10px;align-items:baseline}
+  #guide .k{font-family:var(--mono);font-size:11px;min-width:86px;letter-spacing:.08em}
+  #guide .k.r{color:var(--violet2)} #guide .k.l{color:var(--amber)}
+  #guide .tip{font-size:11.5px;color:var(--dim);margin-top:8px;font-family:var(--mono);line-height:1.5}
+
+  #meters{right:22px;bottom:20px;display:flex;gap:10px}
+  .meter{width:170px;background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:10px 12px;backdrop-filter:blur(6px)}
+  .meter .t{display:flex;justify-content:space-between;font-family:var(--mono);font-size:11px;letter-spacing:.1em}
+  .meter .t span:last-child{color:var(--dim)}
+  .meter .bar{height:6px;background:#161a2a;border-radius:3px;margin-top:8px;overflow:hidden}
+  .meter .bar div{height:100%;width:0%;border-radius:3px;transition:width .08s}
+  .meter.R .bar div{background:linear-gradient(90deg,#5b2bb0,var(--violet))}
+  .meter.L .bar div{background:linear-gradient(90deg,#a1621a,var(--amber))}
+  .meter .act{font-size:11px;color:var(--dim);margin-top:6px;font-family:var(--mono)}
+  .meter.armed{border-color:rgba(255,255,255,.55)}
+  .meter.fired{animation:pop .45s ease-out}
+  @keyframes pop{0%{transform:scale(1.08);border-color:#fff;box-shadow:0 0 30px rgba(255,255,255,.4)}100%{transform:scale(1)}}
+
+  #controls{top:60px;right:22px;display:flex;gap:6px;pointer-events:auto;flex-wrap:wrap;justify-content:flex-end;max-width:60vw}
+  .btn{font-family:var(--mono);font-size:11px;letter-spacing:.08em;color:var(--text);background:rgba(20,24,40,.75);
+    border:1px solid var(--line);padding:6px 10px;border-radius:3px;cursor:pointer;transition:.15s}
+  .btn:hover{border-color:var(--cyan);color:#fff}
+  .btn.on{border-color:var(--cyan);color:var(--cyan)}
+  .btn kbd{font-family:inherit;opacity:.55;margin-left:4px}
+
+  #toast{position:fixed;left:50%;top:16%;transform:translateX(-50%);z-index:6;pointer-events:none;
+    font-weight:700;font-size:clamp(20px,3.2vw,40px);letter-spacing:.3em;opacity:0;text-align:center;white-space:nowrap}
+  #toast small{display:block;font-family:var(--mono);font-weight:400;font-size:12px;letter-spacing:.25em;opacity:.7;margin-top:6px}
+  #toast.show{animation:toast 2.1s ease-out forwards}
+  @keyframes toast{
+    0%{opacity:0;transform:translateX(-50%) scale(1.25);filter:blur(8px)}
+    10%{opacity:1;transform:translateX(-50%) scale(1);filter:blur(0)}
+    14%{transform:translateX(calc(-50% + 6px))} 18%{transform:translateX(calc(-50% - 4px))} 22%{transform:translateX(-50%)}
+    75%{opacity:1} 100%{opacity:0;transform:translateX(-50%) translateY(-12px)}
+  }
+
+  /* ---------- start screen ---------- */
+  #intro{position:fixed;inset:0;z-index:10;display:flex;align-items:center;justify-content:center;padding:24px;
+    background:radial-gradient(ellipse at 50% 30%, rgba(80,30,160,.35), transparent 60%),
+               radial-gradient(ellipse at 80% 90%, rgba(20,120,160,.25), transparent 55%), #05060a;
+    transition:opacity .7s, visibility .7s}
+  body.live #intro{opacity:0;visibility:hidden}
+  #intro::before{content:"";position:absolute;inset:0;pointer-events:none;opacity:.25;
+    background:repeating-linear-gradient(0deg, rgba(255,255,255,.05) 0 1px, transparent 1px 3px)}
+  .card{position:relative;max-width:760px;width:100%;text-align:center}
+  .glitch{position:relative;display:inline-block;font-weight:700;font-size:clamp(46px,9vw,104px);letter-spacing:.12em;line-height:1}
+  .glitch b{color:var(--violet)}
+  .glitch::before,.glitch::after{content:attr(data-text);position:absolute;left:0;top:0;width:100%;overflow:hidden}
+  .glitch::before{color:var(--cyan);transform:translate(-3px,0);mix-blend-mode:screen;animation:g1 2.6s infinite steps(1)}
+  .glitch::after{color:#ff3fd0;transform:translate(3px,0);mix-blend-mode:screen;animation:g2 3.1s infinite steps(1)}
+  @keyframes g1{0%,100%{clip-path:inset(0 0 100% 0)}8%{clip-path:inset(12% 0 60% 0)}10%{clip-path:inset(70% 0 8% 0)}12%{clip-path:inset(0 0 100% 0)}55%{clip-path:inset(40% 0 35% 0)}57%{clip-path:inset(0 0 100% 0)}}
+  @keyframes g2{0%,100%{clip-path:inset(0 0 100% 0)}20%{clip-path:inset(55% 0 20% 0)}22%{clip-path:inset(5% 0 80% 0)}24%{clip-path:inset(0 0 100% 0)}78%{clip-path:inset(30% 0 50% 0)}80%{clip-path:inset(0 0 100% 0)}}
+  .tag{font-family:var(--mono);color:var(--dim);letter-spacing:.3em;font-size:12px;margin:14px 0 30px}
+  .gestures{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:28px;text-align:left}
+  .g{border:1px solid var(--line);background:rgba(12,14,24,.7);padding:14px;border-radius:4px}
+  .g .h{font-family:var(--mono);font-size:11px;letter-spacing:.14em;margin-bottom:6px}
+  .g.r .h{color:var(--violet2)} .g.l .h{color:var(--amber)} .g.a .h{color:var(--cyan)}
+  .g p{margin:0;font-size:14px;color:#c9cfee;line-height:1.4}
+  #go{font-family:var(--display);font-weight:700;font-size:17px;letter-spacing:.25em;color:#fff;cursor:pointer;
+    padding:16px 34px;border:1px solid var(--violet);background:linear-gradient(180deg,rgba(162,75,255,.35),rgba(162,75,255,.12));
+    border-radius:3px;box-shadow:0 0 30px rgba(162,75,255,.35), inset 0 0 20px rgba(162,75,255,.25);transition:.2s}
+  #go:hover{box-shadow:0 0 50px rgba(162,75,255,.6), inset 0 0 26px rgba(162,75,255,.4);transform:translateY(-1px)}
+  #go:disabled{opacity:.5;cursor:wait}
+  #status{font-family:var(--mono);font-size:12px;color:var(--dim);margin-top:18px;min-height:18px;letter-spacing:.06em}
+  #status.err{color:var(--red);line-height:1.6}
+  .fine{font-family:var(--mono);font-size:11px;color:#5d6488;margin-top:22px;line-height:1.6}
+  @media (max-width:720px){.gestures{grid-template-columns:1fr}#guide{display:none}#meters .meter{width:130px}}
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="out" width="1280" height="720"></canvas>
+  <video id="cam" playsinline muted></video>
+</div>
+
+<!-- HUD -->
+<div id="brand" class="hud"><div class="logo">RIFT<b>//</b>SNAP</div><div class="sub">DIMENSIONAL OCCLUSION SYSTEM v2.6</div></div>
+<div id="chips" class="hud">
+  <div class="chip rift" id="chipRift"><i></i>RIFT <span>OFFLINE</span></div>
+  <div class="chip armor" id="chipArmor"><i></i>ARMOR <span>OFFLINE</span></div>
+  <div class="chip" id="chipFace"><i></i>FACE <span>—</span></div>
+  <div class="chip" id="chipHands"><i></i>HANDS <span>0</span></div>
+  <div class="chip on ok" id="chipFps"><i></i><span>-- FPS</span></div>
+</div>
+<div id="controls" class="hud">
+  <button class="btn" data-act="rift">Rift<kbd>R</kbd></button>
+  <button class="btn" data-act="armor">Armor<kbd>A</kbd></button>
+  <button class="btn on" data-act="skel">Skeleton<kbd>H</kbd></button>
+  <button class="btn" data-act="easy">Easy snap<kbd>E</kbd></button>
+  <button class="btn" data-act="swap">Swap hands<kbd>S</kbd></button>
+  <button class="btn on" data-act="sound">Sound<kbd>M</kbd></button>
+  <button class="btn" data-act="full">Fullscreen<kbd>F</kbd></button>
+</div>
+<div id="guide" class="hud">
+  <div class="row"><span class="k r">RIGHT SNAP</span><span>open / seal the rift</span></div>
+  <div class="row"><span class="k l">LEFT SNAP</span><span>equip / drop armor</span></div>
+  <div class="tip">Press thumb + middle finger together, then flick the middle finger down into your palm. Keep your hand in view, palm toward the camera.</div>
+</div>
+<div id="meters" class="hud">
+  <div class="meter L" id="mL"><div class="t"><span>LEFT · ARMOR</span><span class="st">NO HAND</span></div><div class="bar"><div></div></div><div class="act">pinch —</div></div>
+  <div class="meter R" id="mR"><div class="t"><span>RIGHT · RIFT</span><span class="st">NO HAND</span></div><div class="bar"><div></div></div><div class="act">pinch —</div></div>
+</div>
+<div id="toast"></div>
+
+<!-- Start screen -->
+<div id="intro">
+  <div class="card">
+    <div class="glitch" data-text="RIFT//SNAP">RIFT<b>//</b>SNAP</div>
+    <div class="tag">SNAP YOUR FINGERS · BEND REALITY</div>
+    <div class="gestures">
+      <div class="g r"><div class="h">RIGHT-HAND SNAP</div><p>Tears a glitching dimensional rift over your face.</p></div>
+      <div class="g l"><div class="h">LEFT-HAND SNAP</div><p>Assembles armor plating across your body and hands.</p></div>
+      <div class="g a"><div class="h">SNAP AGAIN</div><p>Seals the rift / drops the armor. Back to a plain camera view.</p></div>
+    </div>
+    <button id="go">ACTIVATE CAMERA</button>
+    <div id="status">Loading tracking models…</div>
+    <div class="fine">All tracking runs locally in your browser. No video leaves your computer.<br>
+      Works best in Chrome or Edge, with good lighting and your upper body in frame.</div>
+  </div>
+</div>
+
+<script type="module">
+import { FilesetResolver, HandLandmarker, FaceDetector, PoseLandmarker }
+  from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs";
+
+const WASM = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm";
+const MODELS = {
+  hand: "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
+  face: "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite",
+  pose: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task",
+};
+
+/* ================================================================
+   DOM + state
+   ================================================================ */
+const $ = (s) => document.querySelector(s);
+const canvas = $("#out"), ctx = canvas.getContext("2d");
+const video = $("#cam");
+const statusEl = $("#status"), goBtn = $("#go");
+let W = 1280, H = 720;
+
+const settings = { skeleton: true, easy: false, swap: false, sound: true };
+let handTask = null, faceTask = null, poseTask = null;
+
+const rift = { target: false, open: 0, beam: null, delay: 0 };
+const armor = { target: false, p: 0 };
+let faceS = null, faceSeen = -1e9;
+let poseS = null, poseSeen = -1e9;
+
+const SNAP_CFG = {
+  normal: { pinchT: 0.38, releaseT: 0.55, window: 320, curlDrop: 0.16, curlAbs: 1.2, cooldown: 800, ignoreCurl: false },
+  easy:   { pinchT: 0.46, releaseT: 0.5,  window: 450, curlDrop: 0,    curlAbs: 9,   cooldown: 700, ignoreCurl: true },
+};
+
+/* ================================================================
+   Snap detection
+   A snap = thumb tip & middle tip pressed together (armed), then
+   within a short window they fly apart while the middle finger
+   drops toward the palm (tip-to-wrist distance shrinks).
+   All distances are normalised by hand size (wrist → middle knuckle).
+   ================================================================ */
+class SnapDetector {
+  constructor() { this.lastFire = -1e9; this.firedAt = -1e9; this.reset(); }
+  reset() { this.armed = false; this.pinchFrames = 0; this.lastPinchT = 0; this.curlAtPinch = 0; this.missingSince = 0; }
+  update(m, t) {
+    const cfg = settings.easy ? SNAP_CFG.easy : SNAP_CFG.normal;
+    if (!m) {
+      if (!this.missingSince) this.missingSince = t;
+      if (t - this.missingSince > 350) this.reset();
+      return false;
+    }
+    this.missingSince = 0;
+    if (m.pinch < cfg.pinchT) {
+      this.pinchFrames++;
+      this.lastPinchT = t;
+      this.curlAtPinch = m.curl;
+      if (this.pinchFrames >= 2) this.armed = true;
+      return false;
+    }
+    this.pinchFrames = 0;
+    if (!this.armed) return false;
+    if (t - this.lastPinchT > cfg.window) { this.armed = false; return false; }
+    if (m.pinch > cfg.releaseT) {
+      const curlDrop = m.curl < this.curlAtPinch - cfg.curlDrop || m.curl < cfg.curlAbs;
+      if (curlDrop || cfg.ignoreCurl) {
+        this.armed = false;
+        if (t - this.lastFire > cfg.cooldown) { this.lastFire = t; this.firedAt = t; return true; }
+      }
+    }
+    return false;
+  }
+}
+
+const hands = {
+  Left:  { det: new SnapDetector(), pts: null, present: false, seen: -1e9, metrics: null, color: "#ffb547", glow: "rgba(255,181,71,", gp: 0 },
+  Right: { det: new SnapDetector(), pts: null, present: false, seen: -1e9, metrics: null, color: "#b77bff", glow: "rgba(183,123,255,", gp: 0 },
+};
+
+/* ================================================================
+   Math helpers
+   ================================================================ */
+const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, k) => a + (b - a) * k;
+const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+const add = (a, b) => ({ x: a.x + b.x, y: a.y + b.y });
+const sub = (a, b) => ({ x: a.x - b.x, y: a.y - b.y });
+const mul = (a, k) => ({ x: a.x * k, y: a.y * k });
+const mix = (a, b, k) => ({ x: lerp(a.x, b.x, k), y: lerp(a.y, b.y, k) });
+const norm = (a) => { const l = Math.hypot(a.x, a.y) || 1; return { x: a.x / l, y: a.y / l }; };
+const perp = (a) => ({ x: -a.y, y: a.x });
+const rand = (a, b) => a + Math.random() * (b - a);
+const easeOutBack = (x) => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); };
+const easeOutCubic = (x) => 1 - Math.pow(1 - x, 3);
+const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a)); return t * t * (3 - 2 * t); };
+// landmark (normalised, un-mirrored camera space) -> screen (mirrored selfie view)
+const toS = (p) => ({ x: (1 - p.x) * W, y: p.y * H });
+
+/* ================================================================
+   Audio (all synthesized)
+   ================================================================ */
+let AC = null, master = null, noiseBuf = null, drone = null;
+function initAudio() {
+  try {
+    AC = new (window.AudioContext || window.webkitAudioContext)();
+    master = AC.createGain(); master.gain.value = 0.55; master.connect(AC.destination);
+    noiseBuf = AC.createBuffer(1, AC.sampleRate, AC.sampleRate);
+    const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  } catch (e) { AC = null; }
+}
+const canPlay = () => AC && settings.sound;
+function tone(type, f0, f1, dur, vol, delay = 0) {
+  if (!canPlay()) return;
+  const t = AC.currentTime + delay, o = AC.createOscillator(), g = AC.createGain();
+  o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(Math.max(1, f1), t + dur);
+  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + Math.min(0.02, dur * 0.2));
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g).connect(master); o.start(t); o.stop(t + dur + 0.05);
+}
+function noise(f0, f1, dur, vol, delay = 0, q = 1.2, type = "bandpass") {
+  if (!canPlay()) return;
+  const t = AC.currentTime + delay, s = AC.createBufferSource(), f = AC.createBiquadFilter(), g = AC.createGain();
+  s.buffer = noiseBuf; s.loop = true; f.type = type; f.Q.value = q;
+  f.frequency.setValueAtTime(f0, t); f.frequency.exponentialRampToValueAtTime(f1, t + dur);
+  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + Math.min(0.03, dur * 0.3));
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  s.connect(f).connect(g).connect(master); s.start(t); s.stop(t + dur + 0.05);
+}
+const sfx = {
+  snap() { noise(2600, 1800, 0.07, 0.9, 0, 1.5); tone("sine", 1800, 300, 0.05, 0.15); },
+  riftOpen() {
+    tone("sine", 170, 38, 1.0, 0.55); noise(250, 3200, 0.75, 0.35, 0.05, 0.8);
+    tone("sawtooth", 50, 110, 0.9, 0.06, 0.1); noise(5000, 900, 0.5, 0.12, 0.4, 2);
+    startDrone();
+  },
+  riftClose() { noise(3200, 180, 0.5, 0.3, 0, 0.8); tone("sine", 40, 190, 0.35, 0.45); tone("triangle", 900, 60, 0.3, 0.1, 0.25); stopDrone(); },
+  armorOn() {
+    tone("sawtooth", 260, 1300, 0.6, 0.05);
+    for (let i = 0; i < 6; i++) { const d = 0.12 + i * 0.12; tone("square", 700 - i * 40, 110, 0.07, 0.1, d); noise(6000, 2500, 0.05, 0.25, d, 3, "highpass"); }
+    tone("triangle", 220, 880, 0.45, 0.14, 0.9); tone("sine", 440, 1760, 0.4, 0.06, 1.0);
+  },
+  armorOff() {
+    tone("sawtooth", 1200, 180, 0.6, 0.05);
+    for (let i = 0; i < 4; i++) { const d = 0.05 + i * 0.1; tone("square", 500, 90, 0.07, 0.09, d); noise(5000, 2000, 0.05, 0.2, d, 3, "highpass"); }
+  },
+};
+function startDrone() {
+  if (!canPlay() || drone) return;
+  const t = AC.currentTime, g = AC.createGain(), f = AC.createBiquadFilter(), lfo = AC.createOscillator(), lg = AC.createGain();
+  f.type = "lowpass"; f.frequency.value = 380; f.Q.value = 6;
+  lfo.frequency.value = 0.25; lg.gain.value = 220; lfo.connect(lg).connect(f.frequency);
+  const oscs = [55, 55.6, 82.4].map((fr) => { const o = AC.createOscillator(); o.type = "sawtooth"; o.frequency.value = fr; o.connect(f); o.start(); return o; });
+  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.045, t + 1.2);
+  f.connect(g).connect(master); lfo.start();
+  drone = { g, oscs, lfo };
+}
+function stopDrone() {
+  if (!drone || !AC) return;
+  const d = drone, t = AC.currentTime; drone = null;
+  d.g.gain.cancelScheduledValues(t); d.g.gain.setValueAtTime(d.g.gain.value, t); d.g.gain.exponentialRampToValueAtTime(0.0001, t + 0.4);
+  setTimeout(() => { d.oscs.forEach((o) => o.stop()); d.lfo.stop(); }, 500);
+}
+
+/* ================================================================
+   Model loading
+   ================================================================ */
+async function createTask(Cls, fileset, opts) {
+  try {
+    return await Cls.createFromOptions(fileset, { ...opts, baseOptions: { ...opts.baseOptions, delegate: "GPU" } });
+  } catch (e) {
+    console.warn("GPU delegate failed, falling back to CPU", e);
+    return await Cls.createFromOptions(fileset, { ...opts, baseOptions: { ...opts.baseOptions, delegate: "CPU" } });
+  }
+}
+const modelsReady = (async () => {
+  const fileset = await FilesetResolver.forVisionTasks(WASM);
+  const [h, f, p] = await Promise.allSettled([
+    createTask(HandLandmarker, fileset, { baseOptions: { modelAssetPath: MODELS.hand }, runningMode: "VIDEO", numHands: 2,
+      minHandDetectionConfidence: 0.5, minHandPresenceConfidence: 0.5, minTrackingConfidence: 0.5 }),
+    createTask(FaceDetector, fileset, { baseOptions: { modelAssetPath: MODELS.face }, runningMode: "VIDEO", minDetectionConfidence: 0.45 }),
+    createTask(PoseLandmarker, fileset, { baseOptions: { modelAssetPath: MODELS.pose }, runningMode: "VIDEO", numPoses: 1 }),
+  ]);
+  if (h.status !== "fulfilled") throw h.reason || new Error("Hand model failed to load");
+  handTask = h.value;
+  faceTask = f.status === "fulfilled" ? f.value : null;
+  poseTask = p.status === "fulfilled" ? p.value : null;
+  if (!faceTask) console.warn("Face detector unavailable", f.reason);
+  if (!poseTask) console.warn("Pose model unavailable (armor will cover hands + head only)", p.reason);
+})();
+modelsReady.then(() => { if (!document.body.classList.contains("live")) statusEl.textContent = "Models ready. Allow camera access when your browser asks."; })
+  .catch((e) => { statusEl.className = "err"; statusEl.innerHTML = "Couldn't load the tracking models. Check your internet connection (models download on first run) and reload.<br>" + (e && e.message ? e.message : e); });
+
+/* ================================================================
+   Camera start
+   ================================================================ */
+goBtn.addEventListener("click", start);
+async function start() {
+  goBtn.disabled = true; statusEl.className = ""; statusEl.textContent = "Requesting camera…";
+  initAudio();
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    fail("This browser blocked camera access for this page. Open the file in Chrome or Edge, or serve it from localhost (e.g. <code>python -m http.server</code> → http://localhost:8000/rift-snap.html).");
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" }, audio: false });
+    video.srcObject = stream;
+    await video.play();
+  } catch (e) {
+    fail(e && e.name === "NotAllowedError" ? "Camera permission was denied. Click the camera icon in the address bar, allow access, then reload." :
+         e && e.name === "NotFoundError" ? "No camera found on this computer." : "Camera error: " + (e && e.message ? e.message : e));
+    return;
+  }
+  statusEl.textContent = "Booting neural trackers…";
+  try { await modelsReady; } catch (e) { goBtn.disabled = false; return; }
+  W = canvas.width = video.videoWidth || 1280;
+  H = canvas.height = video.videoHeight || 720;
+  buildStatic();
+  document.body.classList.add("live");
+  showToast("SYSTEM ONLINE", "snap your right hand");
+  requestAnimationFrame(loop);
+}
+function fail(msg) { statusEl.className = "err"; statusEl.innerHTML = msg; goBtn.disabled = false; }
+
+/* ================================================================
+   Static buffers
+   ================================================================ */
+const pbuf = document.createElement("canvas"); pbuf.width = 22; pbuf.height = 26;
+const pctx = pbuf.getContext("2d");
+let scanPattern = null;
+function buildStatic() {
+  const s = document.createElement("canvas"); s.width = 4; s.height = 4;
+  const sc = s.getContext("2d"); sc.fillStyle = "rgba(0,0,0,0.55)"; sc.fillRect(0, 0, 4, 1);
+  scanPattern = ctx.createPattern(s, "repeat");
+}
+
+/* ================================================================
+   Tracking → state
+   ================================================================ */
+function processHands(res, now) {
+  const found = [];
+  const L = res.landmarks || [], HD = res.handedness || res.handednesses || [];
+  for (let i = 0; i < L.length; i++) {
+    const cat = HD[i] && HD[i][0];
+    const label = cat ? cat.categoryName : "Right";
+    // MediaPipe assumes a mirrored image; our frames are raw, so labels are flipped.
+    found.push({ lm: L[i], actual: label === "Left" ? "Right" : "Left", rawX: L[i][0].x });
+  }
+  if (found.length === 2 && found[0].actual === found[1].actual) {
+    found.sort((a, b) => a.rawX - b.rawX); // raw image: the user's right hand sits at smaller x
+    found[0].actual = "Right"; found[1].actual = "Left";
+  }
+  if (settings.swap) found.forEach((f) => (f.actual = f.actual === "Left" ? "Right" : "Left"));
+
+  for (const side of ["Left", "Right"]) {
+    const st = hands[side];
+    const f = found.find((x) => x.actual === side);
+    let m = null;
+    if (f) {
+      const P = f.lm.map((p) => ({ x: p.x * W, y: p.y * H }));
+      const scale = dist(P[0], P[9]) || 1;
+      m = { pinch: dist(P[4], P[12]) / scale, curl: dist(P[12], P[0]) / scale, scale };
+      const S = f.lm.map(toS);
+      if (!st.pts || now - st.seen > 200) st.pts = S;
+      else st.pts = st.pts.map((p, i) => mix(p, S[i], 0.65));
+      st.seen = now; st.present = true; st.metrics = m;
+    } else {
+      st.present = false;
+    }
+    if (st.det.update(m, now)) onSnap(side);
+  }
+}
+
+function processFace(res, now) {
+  const dets = res && res.detections ? res.detections.filter((d) => d.boundingBox) : [];
+  if (!dets.length) return;
+  dets.sort((a, b) => b.boundingBox.width - a.boundingBox.width);
+  const d = dets[0], bb = d.boundingBox;
+  const t = { cx: W - (bb.originX + bb.width / 2), cy: bb.originY + bb.height / 2, w: bb.width, h: bb.height, ang: 0 };
+  if (d.keypoints && d.keypoints.length >= 2) {
+    const a = toS(d.keypoints[0]), b = toS(d.keypoints[1]);
+    let ang = Math.atan2(b.y - a.y, b.x - a.x);
+    if (ang > Math.PI / 2) ang -= Math.PI; if (ang < -Math.PI / 2) ang += Math.PI;
+    t.ang = clamp(ang, -0.8, 0.8);
+  }
+  if (!faceS || now - faceSeen > 1200) faceS = t;
+  else {
+    const k = 0.55;
+    faceS = { cx: lerp(faceS.cx, t.cx, k), cy: lerp(faceS.cy, t.cy, k), w: lerp(faceS.w, t.w, k), h: lerp(faceS.h, t.h, k), ang: lerp(faceS.ang, t.ang, 0.35) };
+  }
+  faceSeen = now;
+}
+
+function processPose(res, now) {
+  const lm = res && res.landmarks && res.landmarks[0];
+  if (!lm) return;
+  const S = lm.map((p) => ({ ...toS(p), v: p.visibility ?? 1 }));
+  if (!poseS || now - poseSeen > 500) poseS = S;
+  else poseS = poseS.map((p, i) => ({ ...mix(p, S[i], 0.5), v: S[i].v }));
+  poseSeen = now;
+}
+
+/* ================================================================
+   Gesture actions
+   ================================================================ */
+function handPoint(side) {
+  const st = hands[side];
+  if (st.pts) return mix(st.pts[4], st.pts[12], 0.5);
+  return { x: W / 2, y: H / 2 };
+}
+function onSnap(side) {
+  const pos = handPoint(side);
+  sfx.snap();
+  const meter = side === "Left" ? $("#mL") : $("#mR");
+  meter.classList.remove("fired"); void meter.offsetWidth; meter.classList.add("fired");
+  if (side === "Right") toggleRift(pos); else toggleArmor(pos);
+}
+function toggleRift(pos) {
+  rift.target = !rift.target;
+  const col = rift.target ? "#b77bff" : "#7fe9ff";
+  burst(pos, col, rift.target ? 1 : 0.6);
+  if (rift.target) {
+    rift.delay = 0.16;
+    rift.beam = { from: pos, t0: performance.now() };
+    sfx.riftOpen(); showToast("RIFT OPEN", "identity occluded"); shake = 16; flash = { a: 0.45, c: "162,75,255" };
+  } else {
+    sfx.riftClose(); showToast("RIFT SEALED", "returning to baseline reality"); shake = 8; flash = { a: 0.25, c: "120,230,255" };
+  }
+}
+function toggleArmor(pos) {
+  armor.target = !armor.target;
+  burst(pos, armor.target ? "#ffb547" : "#7fe9ff", armor.target ? 1 : 0.6);
+  if (armor.target) { sfx.armorOn(); showToast("ARMOR ENGAGED", "plating assembly in progress"); shake = 10; flash = { a: 0.35, c: "255,181,71" }; }
+  else { sfx.armorOff(); showToast("ARMOR RELEASED", "plating disengaged"); shake = 6; flash = { a: 0.2, c: "120,230,255" }; }
+}
+
+/* ================================================================
+   FX systems
+   ================================================================ */
+let shake = 0, flash = { a: 0, c: "255,255,255" };
+const waves = [], sparks = [], embers = [], bolts = [];
+function burst(pos, color, power) {
+  const now = performance.now();
+  waves.push({ x: pos.x, y: pos.y, t0: now, color, max: Math.max(W, H) * 0.55 * power });
+  waves.push({ x: pos.x, y: pos.y, t0: now + 90, color: "#ffffff", max: Math.max(W, H) * 0.32 * power });
+  for (let i = 0; i < 46 * power; i++) {
+    const a = rand(0, Math.PI * 2), sp = rand(150, 900) * power;
+    sparks.push({ x: pos.x, y: pos.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 0, max: rand(0.3, 0.8), color: Math.random() < 0.3 ? "#ffffff" : color, size: rand(1.5, 3.5) });
+  }
+}
+
+/* rift internals */
+const RIFT_N = 72;
+const riftJit = new Float32Array(RIFT_N);
+let riftJitT = 0;
+const stripOff = new Float32Array(14);
+let stripT = 0;
+const swirl = Array.from({ length: 110 }, () => newSwirl(true));
+function newSwirl(any) {
+  return { a: rand(0, Math.PI * 2), r: any ? rand(0.05, 1) : rand(0.85, 1.05), sp: rand(0.25, 0.7), w: rand(0.6, 2.2),
+           c: ["#ffffff", "#d9a6ff", "#7fe9ff", "#ff6fe0", "#a24bff"][(Math.random() * 5) | 0] };
+}
+let tear = { next: 0, until: 0, strips: [] };
+
+/* ================================================================
+   Main loop
+   ================================================================ */
+let lastVideoTime = -1, lastT = performance.now(), frameIdx = 0, fps = 0, fpsT0 = performance.now(), fpsN = 0, hudT = 0, baseT = null;
+function loop() {
+  requestAnimationFrame(loop);
+  const now = performance.now();
+  const dt = Math.min(0.05, (now - lastT) / 1000); lastT = now;
+
+  if (video.readyState >= 2 && video.currentTime !== lastVideoTime) {
+    lastVideoTime = video.currentTime;
+    frameIdx++;
+    fpsN++;
+    try { processHands(handTask.detectForVideo(video, now), now); } catch (e) { console.warn(e); }
+    if (faceTask) { try { processFace(faceTask.detectForVideo(video, now), now); } catch (e) { console.warn(e); } }
+    if (poseTask && (armor.target || armor.p > 0) && frameIdx % 2 === 0) {
+      try { processPose(poseTask.detectForVideo(video, now), now); } catch (e) { console.warn(e); }
+    }
+  }
+  update(dt, now);
+  render(now, dt);
+  if (now - hudT > 90) { hudT = now; updateHud(now); }
+}
+
+function update(dt, now) {
+  if (rift.target) {
+    if (rift.delay > 0) rift.delay -= dt; else rift.open = Math.min(1, rift.open + dt / 0.6);
+  } else rift.open = Math.max(0, rift.open - dt / 0.42);
+  armor.p = armor.target ? Math.min(1, armor.p + dt / 1.4) : Math.max(0, armor.p - dt / 0.8);
+  if (poseS && now - poseSeen > 900) poseS = null;
+  for (const s of ["Left", "Right"]) {
+    const h = hands[s];
+    h.gp = clamp(h.gp + (armor.target ? dt / 0.8 : -dt / 0.5));
+    if (!h.present && now - h.seen > 250) h.pts = null;
+  }
+  shake *= Math.pow(0.0015, dt);
+  flash.a *= Math.pow(0.002, dt);
+
+  for (let i = sparks.length - 1; i >= 0; i--) {
+    const p = sparks[i]; p.life += dt; p.vx *= 0.92; p.vy = p.vy * 0.92 + 200 * dt;
+    p.x += p.vx * dt; p.y += p.vy * dt; if (p.life > p.max) sparks.splice(i, 1);
+  }
+  for (let i = embers.length - 1; i >= 0; i--) {
+    const p = embers[i]; p.life += dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vy -= 30 * dt; p.vx *= 0.98;
+    if (p.life > p.max) embers.splice(i, 1);
+  }
+  for (let i = bolts.length - 1; i >= 0; i--) { bolts[i].life += dt; if (bolts[i].life > bolts[i].max) bolts.splice(i, 1); }
+  for (let i = waves.length - 1; i >= 0; i--) if (now - waves[i].t0 > 700) waves.splice(i, 1);
+
+  if (now - riftJitT > 55) { riftJitT = now; for (let i = 0; i < RIFT_N; i++) riftJit[i] = rand(-0.035, 0.035) + (Math.random() < 0.04 ? rand(0.05, 0.12) : 0); }
+  if (now - stripT > 75) { stripT = now; for (let i = 0; i < stripOff.length; i++) stripOff[i] = Math.random() < 0.55 ? rand(-0.16, 0.16) : 0; }
+  for (const s of swirl) {
+    s.r -= dt * s.sp * (0.25 + (1 - s.r) * 0.9);
+    s.a += dt * (1.1 / (s.r + 0.12));
+    if (s.r < 0.03) Object.assign(s, newSwirl(false));
+  }
+}
+
+/* ================================================================
+   Render
+   ================================================================ */
+function render(now, dt) {
+  const t = now / 1000;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalCompositeOperation = "source-over"; ctx.globalAlpha = 1;
+  ctx.fillStyle = "#000"; ctx.fillRect(0, 0, W, H);
+  if (shake > 0.3) {
+    const s = 1 + shake * 0.002;
+    ctx.translate(W / 2 + rand(-shake, shake), H / 2 + rand(-shake, shake)); ctx.scale(s, s); ctx.translate(-W / 2, -H / 2);
+  }
+  baseT = ctx.getTransform();
+
+  // camera, mirrored
+  ctx.save(); ctx.translate(W, 0); ctx.scale(-1, 1); ctx.drawImage(video, 0, 0, W, H); ctx.restore();
+
+  const ro = rift.open;
+  // sample the face area before anything is drawn over it
+  const F = currentFace();
+  if (ro > 0 && F) {
+    const bx = F.cx - F.w * 1.35, by = F.cy - F.h * 1.6, bw = F.w * 2.7, bh = F.h * 3.0;
+    pctx.clearRect(0, 0, pbuf.width, pbuf.height);
+    try { pctx.drawImage(canvas, bx, by, bw, bh, 0, 0, pbuf.width, pbuf.height); } catch (e) {}
+  }
+
+  if (armor.p > 0) drawArmorBody(t);
+  if (armor.p > 0 && F && ro < 1) { ctx.save(); ctx.globalAlpha = 1 - easeOutCubic(ro); drawHelmet(F, t, armorStage(0.55)); ctx.restore(); }
+  if (ro > 0 && F) drawRift(F, t, dt, ro);
+  if (ro > 0) drawTears(now);
+
+  drawHands(t);
+  drawBeam(now);
+  drawWaves(now);
+  drawParticles();
+  if (armor.target && armor.p < 1) drawScan(armor.p);
+  if (ro > 0) drawAmbient(ro, t);
+
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  if (flash.a > 0.01) { ctx.globalCompositeOperation = "lighter"; ctx.fillStyle = `rgba(${flash.c},${flash.a})`; ctx.fillRect(0, 0, W, H); ctx.globalCompositeOperation = "source-over"; }
+}
+
+function currentFace() {
+  if (faceS) return { ...faceS, cy: faceS.cy - faceS.h * 0.08 };
+  if (rift.open > 0 || armor.p > 0) return { cx: W / 2, cy: H * 0.38, w: Math.min(W, H) * 0.22, h: Math.min(W, H) * 0.26, ang: 0 };
+  return null;
+}
+
+/* ----------------- RIFT ----------------- */
+function riftPath(rx, ry, t, k, begin = true) {
+  if (begin) ctx.beginPath();
+  for (let i = 0; i <= RIFT_N; i++) {
+    const j = i % RIFT_N, th = (j / RIFT_N) * Math.PI * 2;
+    const r = k * (1 + 0.07 * Math.sin(5 * th + t * 2.1) + 0.045 * Math.sin(9 * th - t * 3.4) + 0.03 * Math.sin(17 * th + t * 7) + riftJit[j]);
+    const x = Math.cos(th) * rx * r, y = Math.sin(th) * ry * r;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+}
+
+function drawRift(F, t, dt, ro) {
+  const sc = Math.max(0, easeOutBack(clamp(ro)));
+  if (sc < 0.002) return;
+  const rx = F.w * 0.9 * sc, ry = F.h * 1.18 * sc;
+  const local = () => { ctx.setTransform(baseT); ctx.translate(F.cx, F.cy); ctx.rotate(F.ang); };
+
+  // 1) torn halo of pixel-shredded fragments around the rift
+  ctx.save();
+  local();
+  riftPath(rx, ry, t, 1.38); riftPath(rx, ry, t * 1.1 + 2, 0.96, false);
+  ctx.clip("evenodd");
+  ctx.setTransform(baseT);
+  ctx.imageSmoothingEnabled = false;
+  const bx = F.cx - F.w * 1.35, by = F.cy - F.h * 1.6, bw = F.w * 2.7, bh = F.h * 3.0;
+  const N = stripOff.length;
+  for (let i = 0; i < N; i++) {
+    const sy = (i / N) * pbuf.height, sh = pbuf.height / N;
+    ctx.drawImage(pbuf, 0, sy, pbuf.width, sh, bx + stripOff[i] * bw, by + (i / N) * bh, bw, bh / N + 1);
+  }
+  ctx.imageSmoothingEnabled = true;
+  ctx.globalCompositeOperation = "screen";
+  for (let i = 0; i < N; i++) {
+    if (stripOff[i] === 0) continue;
+    ctx.fillStyle = i % 2 ? "rgba(255,40,210,0.35)" : "rgba(40,230,255,0.3)";
+    ctx.fillRect(bx + stripOff[i] * bw * 1.4, by + (i / N) * bh, bw, bh / N);
+  }
+  ctx.globalCompositeOperation = "source-over";
+  ctx.fillStyle = "rgba(20,0,40,0.35)"; ctx.fillRect(bx - bw, by - bh, bw * 3, bh * 3);
+  ctx.restore();
+
+  // 2) the void
+  ctx.save();
+  local();
+  riftPath(rx, ry, t, 1);
+  ctx.clip();
+  const R = Math.max(rx, ry) * 1.3;
+  const g = ctx.createRadialGradient(0, 0, 0, 0, 0, R);
+  g.addColorStop(0, "#000"); g.addColorStop(0.35, "#06001a"); g.addColorStop(0.68, "#1c0548"); g.addColorStop(0.9, "#3d0d8f"); g.addColorStop(1, "#7a2bff");
+  ctx.fillStyle = g; ctx.fillRect(-R, -R, R * 2, R * 2);
+
+  ctx.globalCompositeOperation = "lighter";
+  // drifting nebula blobs
+  for (let i = 0; i < 4; i++) {
+    const a = t * (0.4 + i * 0.13) + i * 1.7, rr = 0.45 + 0.15 * Math.sin(t + i);
+    const x = Math.cos(a) * rx * rr, y = Math.sin(a) * ry * rr, s = Math.max(rx, ry) * 0.7;
+    const ng = ctx.createRadialGradient(x, y, 0, x, y, s);
+    ng.addColorStop(0, i % 2 ? "rgba(255,60,220,0.28)" : "rgba(60,200,255,0.22)"); ng.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = ng; ctx.fillRect(x - s, y - s, s * 2, s * 2);
+  }
+  // rotating rings
+  ctx.lineWidth = 1.5;
+  [[0.32, 1.4, "rgba(127,233,255,0.55)", [4, 9]], [0.58, -0.9, "rgba(217,166,255,0.5)", [18, 10, 3, 10]], [0.82, 0.6, "rgba(255,111,224,0.35)", [2, 6]]].forEach(([k, sp, c, dash]) => {
+    ctx.save(); ctx.rotate(t * sp); ctx.setLineDash(dash.map((d) => d * (rx / 80)));
+    ctx.strokeStyle = c; ctx.beginPath(); ctx.ellipse(0, 0, rx * k, ry * k, 0, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+  });
+  ctx.setLineDash([]);
+  // particles spiralling into the singularity
+  for (const s of swirl) {
+    const x = Math.cos(s.a) * s.r * rx, y = Math.sin(s.a) * s.r * ry;
+    const a2 = s.a - 0.18 / (s.r + 0.2), x2 = Math.cos(a2) * (s.r + 0.03) * rx, y2 = Math.sin(a2) * (s.r + 0.03) * ry;
+    ctx.strokeStyle = s.c; ctx.globalAlpha = clamp(s.r * 1.4) * 0.9; ctx.lineWidth = s.w;
+    ctx.beginPath(); ctx.moveTo(x2, y2); ctx.lineTo(x, y); ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+  // singularity core
+  const cr = Math.min(rx, ry) * (0.22 + 0.04 * Math.sin(t * 6));
+  const cg = ctx.createRadialGradient(0, 0, 0, 0, 0, cr);
+  cg.addColorStop(0, "rgba(255,255,255,0.95)"); cg.addColorStop(0.25, "rgba(220,170,255,0.6)"); cg.addColorStop(1, "rgba(120,40,255,0)");
+  ctx.fillStyle = cg; ctx.fillRect(-cr, -cr, cr * 2, cr * 2);
+  ctx.globalCompositeOperation = "source-over";
+  ctx.restore();
+
+  // 3) energy edge with chromatic split
+  ctx.save();
+  local();
+  ctx.lineJoin = "round";
+  riftPath(rx, ry, t, 1);
+  ctx.shadowColor = "#a24bff"; ctx.shadowBlur = 40;
+  ctx.strokeStyle = "rgba(162,75,255,0.45)"; ctx.lineWidth = 16; ctx.stroke();
+  ctx.shadowBlur = 16; ctx.strokeStyle = "#d9a6ff"; ctx.lineWidth = 5; ctx.stroke();
+  ctx.shadowBlur = 0;
+  ctx.globalCompositeOperation = "lighter";
+  ctx.save(); ctx.translate(4, 0); ctx.strokeStyle = "rgba(40,230,255,0.75)"; ctx.lineWidth = 2; riftPath(rx, ry, t, 1.01); ctx.stroke(); ctx.restore();
+  ctx.save(); ctx.translate(-4, 0); ctx.strokeStyle = "rgba(255,40,210,0.75)"; ctx.lineWidth = 2; riftPath(rx, ry, t, 0.99); ctx.stroke(); ctx.restore();
+  ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 1.5; riftPath(rx, ry, t, 1); ctx.stroke();
+
+  // lightning bolts crawling off the edge
+  if (Math.random() < 0.16 * ro) bolts.push(makeBolt(rx, ry));
+  for (const b of bolts) {
+    const a = 1 - b.life / b.max;
+    ctx.strokeStyle = `rgba(230,200,255,${a})`; ctx.lineWidth = 2 * a + 0.5; ctx.shadowColor = "#b77bff"; ctx.shadowBlur = 14;
+    for (const path of b.paths) { ctx.beginPath(); path.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y))); ctx.stroke(); }
+  }
+  ctx.restore();
+
+  // embers leaking out
+  const rate = 70 * ro * dt, count = Math.min(8, Math.floor(rate) + (Math.random() < rate % 1 ? 1 : 0));
+  for (let i = 0; i < count; i++) {
+    const th = rand(0, Math.PI * 2), c = Math.cos(F.ang), s = Math.sin(F.ang);
+    const lx = Math.cos(th) * rx, ly = Math.sin(th) * ry;
+    const x = F.cx + lx * c - ly * s, y = F.cy + lx * s + ly * c;
+    const out = norm({ x: x - F.cx, y: y - F.cy }), sp = rand(30, 140);
+    embers.push({ x, y, vx: out.x * sp, vy: out.y * sp - 20, life: 0, max: rand(0.5, 1.3), size: rand(2, 5),
+      c: ["#b77bff", "#7fe9ff", "#ff6fe0", "#ffffff"][(Math.random() * 4) | 0] });
+  }
+}
+function makeBolt(rx, ry) {
+  const th = rand(0, Math.PI * 2), paths = [];
+  const startR = rand(0.95, 1.05);
+  const grow = (x, y, dir, len, depth) => {
+    const pts = [{ x, y }]; const n = 7, step = len / n;
+    for (let i = 0; i < n; i++) {
+      dir += rand(-0.7, 0.7); x += Math.cos(dir) * step; y += Math.sin(dir) * step; pts.push({ x, y });
+      if (depth < 1 && Math.random() < 0.18) grow(x, y, dir + rand(-1, 1), len * 0.45, depth + 1);
+    }
+    paths.push(pts);
+  };
+  grow(Math.cos(th) * rx * startR, Math.sin(th) * ry * startR, Math.atan2(Math.sin(th) * rx, Math.cos(th) * ry), Math.max(rx, ry) * rand(0.35, 0.8), 0);
+  return { paths, life: 0, max: rand(0.08, 0.18) };
+}
+function drawTears(now) {
+  if (now > tear.next) {
+    tear.until = now + rand(90, 200);
+    tear.next = now + rand(900, 3200);
+    tear.strips = Array.from({ length: (rand(3, 7)) | 0 }, () => ({ y: rand(0, H), h: rand(4, 46), dx: rand(-36, 36) }));
+  }
+  if (now > tear.until) return;
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
+  for (const s of tear.strips) {
+    const y = clamp(s.y, 0, H - s.h);
+    ctx.drawImage(canvas, 0, y, W, s.h, s.dx, y, W, s.h);
+    ctx.globalCompositeOperation = "screen";
+    ctx.fillStyle = s.dx > 0 ? "rgba(255,40,210,0.18)" : "rgba(40,230,255,0.18)"; ctx.fillRect(0, y, W, s.h);
+    ctx.globalCompositeOperation = "source-over";
+  }
+  ctx.restore();
+}
+function drawAmbient(ro, t) {
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
+  const g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, Math.max(W, H) * 0.75);
+  g.addColorStop(0, "rgba(0,0,0,0)"); g.addColorStop(1, `rgba(60,10,120,${0.5 * ro})`);
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  if (scanPattern) { ctx.globalAlpha = 0.18 * ro; ctx.fillStyle = scanPattern; ctx.fillRect(0, 0, W, H); }
+  ctx.restore();
+}
+function drawBeam(now) {
+  const b = rift.beam; if (!b) return;
+  const a = (now - b.t0) / 380; if (a > 1) { rift.beam = null; return; }
+  const F = currentFace(); if (!F) return;
+  const p0 = b.from, p1 = { x: F.cx, y: F.cy };
+  const n = perp(norm(sub(p1, p0))), L = dist(p0, p1);
+  ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.lineJoin = "round";
+  for (let k = 0; k < 2; k++) {
+    ctx.beginPath(); ctx.moveTo(p0.x, p0.y);
+    for (let i = 1; i < 14; i++) { const q = mix(p0, p1, i / 14), o = rand(-1, 1) * L * 0.05 * (1 - a); ctx.lineTo(q.x + n.x * o, q.y + n.y * o); }
+    ctx.lineTo(p1.x, p1.y);
+    ctx.strokeStyle = k ? `rgba(255,255,255,${1 - a})` : `rgba(162,75,255,${0.8 * (1 - a)})`;
+    ctx.lineWidth = k ? 2 : 10; ctx.shadowColor = "#a24bff"; ctx.shadowBlur = 25; ctx.stroke();
+  }
+  ctx.restore();
+}
+function drawWaves(now) {
+  ctx.save(); ctx.globalCompositeOperation = "lighter";
+  for (const w of waves) {
+    const a = (now - w.t0) / 600; if (a < 0 || a > 1) continue;
+    const r = easeOutCubic(a) * w.max;
+    ctx.strokeStyle = w.color; ctx.globalAlpha = (1 - a) * 0.9; ctx.lineWidth = 16 * (1 - a) + 1;
+    ctx.shadowColor = w.color; ctx.shadowBlur = 30;
+    ctx.beginPath(); ctx.arc(w.x, w.y, r, 0, Math.PI * 2); ctx.stroke();
+  }
+  ctx.restore();
+}
+function drawParticles() {
+  ctx.save(); ctx.globalCompositeOperation = "lighter";
+  for (const p of sparks) {
+    const a = 1 - p.life / p.max; ctx.globalAlpha = a; ctx.strokeStyle = p.color; ctx.lineWidth = p.size;
+    ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x - p.vx * 0.025, p.y - p.vy * 0.025); ctx.stroke();
+  }
+  for (const p of embers) {
+    const a = 1 - p.life / p.max; ctx.globalAlpha = a; ctx.fillStyle = p.c;
+    const s = p.size * (0.5 + a * 0.5); ctx.fillRect(p.x - s / 2, p.y - s / 2, s, s);
+  }
+  ctx.restore();
+}
+function drawScan(p) {
+  const y = H * easeOutCubic(p);
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalCompositeOperation = "lighter";
+  const g = ctx.createLinearGradient(0, y - 60, 0, y + 4);
+  g.addColorStop(0, "rgba(56,232,255,0)"); g.addColorStop(1, "rgba(56,232,255,0.22)");
+  ctx.fillStyle = g; ctx.fillRect(0, y - 60, W, 64);
+  ctx.fillStyle = "rgba(160,245,255,0.9)"; ctx.fillRect(0, y, W, 2);
+  ctx.restore();
+}
+
+/* ----------------- HANDS ----------------- */
+const HAND_EDGES = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
+const FINGERS = [[1,2,3,4],[5,6,7,8],[9,10,11,12],[13,14,15,16],[17,18,19,20]];
+function drawHands(t) {
+  for (const side of ["Left", "Right"]) {
+    const h = hands[side]; if (!h.pts) continue;
+    const S = h.pts, sc = dist(S[0], S[9]);
+    const gp = h.gp;
+    if (gp > 0) drawGauntlet(S, sc, smooth(0, 1, gp), t, h);
+    if (settings.skeleton && gp < 1) {
+      ctx.save(); ctx.globalAlpha = 1 - gp; ctx.lineCap = "round";
+      ctx.shadowColor = h.color; ctx.shadowBlur = 12; ctx.strokeStyle = h.glow + "0.85)"; ctx.lineWidth = 3;
+      ctx.beginPath(); for (const [a, b] of HAND_EDGES) { ctx.moveTo(S[a].x, S[a].y); ctx.lineTo(S[b].x, S[b].y); } ctx.stroke();
+      ctx.shadowBlur = 0; ctx.fillStyle = "#fff";
+      for (const p of S) { ctx.beginPath(); ctx.arc(p.x, p.y, 2.6, 0, Math.PI * 2); ctx.fill(); }
+      ctx.restore();
+    }
+    // pinch reticle between thumb & middle finger
+    const m = mix(S[4], S[12], 0.5), d = dist(S[4], S[12]);
+    const armed = h.det.armed, justFired = performance.now() - h.det.firedAt < 250;
+    ctx.save(); ctx.strokeStyle = armed || justFired ? "#ffffff" : h.glow + "0.7)"; ctx.lineWidth = armed ? 2.5 : 1.5;
+    ctx.shadowColor = h.color; ctx.shadowBlur = armed ? 18 : 6;
+    const r = Math.max(10, d / 2 + 8);
+    ctx.setLineDash([6, 5]); ctx.lineDashOffset = -t * 30;
+    ctx.beginPath(); ctx.arc(m.x, m.y, r, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+    ctx.font = "600 12px 'JetBrains Mono', monospace"; ctx.fillStyle = h.color; ctx.shadowBlur = 0;
+    const label = (side === "Right" ? "R · RIFT" : "L · ARMOR") + (armed ? "  ARMED" : "");
+    ctx.fillText(label, S[0].x - 30, S[0].y + 28);
+    ctx.restore();
+  }
+}
+
+/* ----------------- ARMOR ----------------- */
+const armorStage = (d) => clamp((armor.p * 1.2 - d) / 0.45);
+function metal(x0, y0, x1, y1, tone = 0) {
+  const g = ctx.createLinearGradient(x0, y0, x1, y1);
+  const c = tone ? ["#1a1408", "#4a3a1c", "#b8924a", "#4a3a1c", "#1a1408"] : ["#0d1119", "#283143", "#6f7f9c", "#283143", "#0d1119"];
+  g.addColorStop(0, c[0]); g.addColorStop(0.3, c[1]); g.addColorStop(0.5, c[2]); g.addColorStop(0.72, c[3]); g.addColorStop(1, c[4]);
+  return g;
+}
+function plate(build, p, fill, glow = "#38e8ff", lw = 2) {
+  if (p <= 0) return;
+  ctx.save();
+  build();
+  const fa = smooth(0.35, 1, p);
+  if (fa > 0) { ctx.globalAlpha = fa; ctx.fillStyle = fill; ctx.fill(); }
+  ctx.globalAlpha = Math.min(1, p * 1.6) * (p < 1 && Math.random() < 0.15 ? 0.4 : 1);
+  ctx.strokeStyle = glow; ctx.lineWidth = lw; ctx.shadowColor = glow; ctx.shadowBlur = 10; ctx.lineJoin = "round"; ctx.stroke();
+  ctx.restore();
+}
+const poly = (pts) => () => { ctx.beginPath(); pts.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y))); ctx.closePath(); };
+function seam(a, b, p, c = "rgba(56,232,255,0.75)", w = 1.5) {
+  if (p <= 0) return;
+  ctx.save(); ctx.globalAlpha = p; ctx.strokeStyle = c; ctx.lineWidth = w; ctx.shadowColor = c; ctx.shadowBlur = 8;
+  ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); ctx.restore();
+}
+const vis = (i) => poseS && poseS[i] && poseS[i].v > 0.5;
+
+function drawArmorBody(t) {
+  if (!poseS || !vis(11) || !vis(12)) return;
+  const LS = poseS[11], RS = poseS[12];
+  const mid = mix(LS, RS, 0.5), sw = dist(LS, RS);
+  if (sw < 20) return;
+  let down = norm(perp(sub(RS, LS))); if (down.y < 0) down = mul(down, -1);
+  const hipFor = (i, S) => (vis(i) && poseS[i].y > S.y + sw * 0.5 ? poseS[i] : add(S, mul(down, sw * 1.35)));
+  const LH = hipFor(23, LS), RH = hipFor(24, RS), hipMid = mix(LH, RH, 0.5);
+
+  // arms (under torso + pauldrons)
+  const pa = armorStage(0.35);
+  for (const [s, e, w] of [[11, 13, 15], [12, 14, 16]]) {
+    if (vis(s) && vis(e)) limb(poseS[s], poseS[e], sw * 0.26, sw * 0.2, pa);
+    if (vis(e) && vis(w)) limb(poseS[e], poseS[w], sw * 0.21, sw * 0.17, pa);
+    if (vis(e)) plate(() => { ctx.beginPath(); ctx.arc(poseS[e].x, poseS[e].y, sw * 0.1, 0, Math.PI * 2); }, pa,
+      metal(poseS[e].x - sw * 0.1, poseS[e].y, poseS[e].x + sw * 0.1, poseS[e].y), "#ffb547", 1.5);
+  }
+
+  // torso
+  const pt = armorStage(0.1);
+  const side = (S, Hp, u) => ({
+    neck: add(mid, add(mul(u, sw * 0.17), mul(down, -sw * 0.03))),
+    top: add(S, add(mul(u, -sw * 0.06), mul(down, sw * 0.03))),
+    pit: add(S, add(mul(u, -sw * 0.03), mul(down, sw * 0.45))),
+    waist: add(mix(S, Hp, 0.8), mul(u, -sw * 0.13)),
+    hip: add(Hp, mul(u, -sw * 0.05)),
+  });
+  const uL = norm(sub(LS, mid)), uR = norm(sub(RS, mid));
+  const A = side(LS, LH, uL), B = side(RS, RH, uR);
+  const bottom = add(hipMid, mul(down, sw * 0.06)), collar = add(mid, mul(down, sw * 0.1));
+  plate(poly([A.neck, A.top, A.pit, A.waist, A.hip, bottom, B.hip, B.waist, B.pit, B.top, B.neck, collar]), pt,
+    metal(LS.x, LS.y, RS.x, RS.y), "#38e8ff", 2.5);
+  // pectoral plates
+  for (const [S, u, P] of [[LS, uL, A], [RS, uR, B]]) {
+    const c0 = add(collar, mul(u, sw * 0.04));
+    plate(poly([c0, add(P.neck, mul(down, sw * 0.06)), add(P.top, add(mul(down, sw * 0.08), mul(u, -sw * 0.06))),
+      add(P.pit, mul(u, -sw * 0.07)), add(mid, add(mul(down, sw * 0.55), mul(u, sw * 0.04)))]), armorStage(0.18),
+      metal(mid.x, mid.y, S.x, S.y + sw * 0.3), "rgba(56,232,255,0.8)", 1.5);
+  }
+  // abdominal segments
+  const chestBot = add(mid, mul(down, sw * 0.6));
+  for (let k = 1; k <= 3; k++) {
+    const f = k / 4, c = mix(chestBot, hipMid, f), half = sw * (0.34 - f * 0.08);
+    const across = norm(sub(RS, LS));
+    const l = add(c, mul(across, -half)), r = add(c, mul(across, half)), dip = add(c, mul(down, sw * 0.05));
+    seam(l, dip, armorStage(0.2 + k * 0.04)); seam(dip, r, armorStage(0.2 + k * 0.04));
+  }
+  seam(collar, add(chestBot, mul(down, -sw * 0.02)), armorStage(0.2), "rgba(255,181,71,0.8)", 1.5);
+
+  // shoulder pauldrons
+  const pp = armorStage(0.25);
+  for (const [si, ei, u] of [[11, 13, uL], [12, 14, uR]]) {
+    const S = poseS[si];
+    const ax = vis(ei) ? norm(sub(poseS[ei], S)) : norm(add(mul(down, 0.7), mul(u, 0.3)));
+    const ang = Math.atan2(ax.y, ax.x);
+    for (let k = 2; k >= 0; k--) {
+      const c = add(S, mul(ax, sw * (-0.04 + k * 0.1)));
+      const ra = sw * (0.2 - k * 0.025), rb = sw * (0.27 - k * 0.035);
+      plate(() => { ctx.beginPath(); ctx.ellipse(c.x, c.y, ra, rb, ang, Math.PI / 2, Math.PI * 1.5); ctx.closePath(); }, pp,
+        metal(c.x - rb, c.y - rb, c.x + rb, c.y + rb, k === 0 ? 1 : 0), k === 0 ? "#ffb547" : "#38e8ff", k === 0 ? 2 : 1.5);
+    }
+  }
+  // gorget (neck guard)
+  const F = currentFace();
+  if (F && rift.open < 1) {
+    const chin = { x: F.cx, y: F.cy + F.h * 0.75 };
+    if (chin.y < collar.y) {
+      const nw = sw * 0.17;
+      plate(poly([add(chin, { x: -nw * 0.8, y: 0 }), add(chin, { x: nw * 0.8, y: 0 }), add(collar, { x: nw * 1.2, y: -sw * 0.05 }), add(collar, { x: -nw * 1.2, y: -sw * 0.05 })]),
+        armorStage(0.45) * (1 - rift.open), metal(chin.x - nw, chin.y, chin.x + nw, chin.y), "#38e8ff", 1.5);
+    }
+  }
+  // power core
+  const pc = armorStage(0);
+  if (pc > 0) {
+    const c = add(mid, mul(down, sw * 0.32)), r = sw * 0.085, pulse = 0.75 + 0.25 * Math.sin(t * 5);
+    ctx.save(); ctx.globalAlpha = pc;
+    ctx.beginPath(); for (let i = 0; i < 6; i++) { const a = i * Math.PI / 3 + Math.PI / 6; ctx[i ? "lineTo" : "moveTo"](c.x + Math.cos(a) * r, c.y + Math.sin(a) * r); } ctx.closePath();
+    ctx.fillStyle = "#0a0d14"; ctx.fill(); ctx.strokeStyle = "#ffb547"; ctx.lineWidth = 2.5; ctx.shadowColor = "#ffb547"; ctx.shadowBlur = 16; ctx.stroke();
+    const g = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, r * 2.2);
+    g.addColorStop(0, `rgba(255,255,255,${pulse})`); g.addColorStop(0.25, `rgba(56,232,255,${0.8 * pulse})`); g.addColorStop(1, "rgba(56,232,255,0)");
+    ctx.globalCompositeOperation = "lighter"; ctx.fillStyle = g; ctx.beginPath(); ctx.arc(c.x, c.y, r * 2.2, 0, Math.PI * 2); ctx.fill();
+    ctx.translate(c.x, c.y); ctx.rotate(t * 1.5); ctx.strokeStyle = "rgba(200,250,255,0.9)"; ctx.lineWidth = 1.5; ctx.shadowColor = "#38e8ff";
+    ctx.beginPath(); for (let i = 0; i < 3; i++) { const a = i * 2 * Math.PI / 3; ctx[i ? "lineTo" : "moveTo"](Math.cos(a) * r * 0.55, Math.sin(a) * r * 0.55); } ctx.closePath(); ctx.stroke();
+    ctx.restore();
+  }
+}
+function limb(A, B, wA, wB, p) {
+  const d = norm(sub(B, A)), n = perp(d), L = dist(A, B);
+  const a = add(A, mul(d, L * 0.1)), b = sub(B, mul(d, L * 0.08));
+  plate(poly([add(a, mul(n, wA / 2)), add(b, mul(n, wB / 2)), sub(b, mul(n, wB / 2)), sub(a, mul(n, wA / 2))]), p,
+    metal(a.x + n.x * wA / 2, a.y + n.y * wA / 2, a.x - n.x * wA / 2, a.y - n.y * wA / 2), "#38e8ff", 1.8);
+  seam(add(a, mul(d, L * 0.08)), sub(b, mul(d, L * 0.08)), p * 0.8);
+  const m = mix(a, b, 0.5);
+  seam(add(m, mul(n, wA * 0.42)), sub(m, mul(n, wA * 0.42)), p * 0.6, "rgba(255,181,71,0.7)", 1.2);
+}
+function drawGauntlet(S, sc, p, t, h) {
+  const d = norm(sub(S[9], S[0])), n = perp(d);
+  // wrist cuff
+  const c0 = sub(S[0], mul(d, sc * 0.55)), c1 = add(S[0], mul(d, sc * 0.08)), cw = sc * 0.5;
+  plate(poly([add(c0, mul(n, cw * 0.95)), add(c1, mul(n, cw)), sub(c1, mul(n, cw)), sub(c0, mul(n, cw * 0.95))]), p,
+    metal(c0.x + n.x * cw, c0.y + n.y * cw, c0.x - n.x * cw, c0.y - n.y * cw), "#38e8ff", 1.8);
+  seam(add(mix(c0, c1, 0.5), mul(n, cw * 0.9)), sub(mix(c0, c1, 0.5), mul(n, cw * 0.9)), p, "rgba(255,181,71,0.8)", 1.5);
+  // finger plating
+  ctx.save(); ctx.globalAlpha = p; ctx.lineCap = "round"; ctx.lineJoin = "round";
+  for (let f = 0; f < 5; f++) {
+    const ch = FINGERS[f];
+    ctx.beginPath(); ch.forEach((i, k) => (k ? ctx.lineTo(S[i].x, S[i].y) : ctx.moveTo(S[i].x, S[i].y)));
+    ctx.strokeStyle = "#1c2230"; ctx.lineWidth = sc * (f === 0 ? 0.24 : 0.2); ctx.stroke();
+    ctx.strokeStyle = "#56647e"; ctx.lineWidth = sc * 0.07; ctx.stroke();
+  }
+  for (let i = 1; i < 21; i++) {
+    if (i % 4 === 1) continue;
+    ctx.beginPath(); ctx.arc(S[i].x, S[i].y, sc * 0.045, 0, Math.PI * 2);
+    ctx.fillStyle = i % 4 === 0 ? "#bff6ff" : "#38e8ff"; ctx.shadowColor = "#38e8ff"; ctx.shadowBlur = i % 4 === 0 ? 12 : 6; ctx.fill();
+  }
+  ctx.restore();
+  // back-of-hand plate
+  const ids = [0, 1, 5, 9, 13, 17], cen = ids.reduce((a, i) => add(a, mul(S[i], 1 / ids.length)), { x: 0, y: 0 });
+  const back = ids.map((i) => add(cen, mul(sub(S[i], cen), 1.12)));
+  plate(poly(back), p, metal(back[1].x, back[1].y, back[5].x, back[5].y), "#38e8ff", 2);
+  for (const i of [5, 9, 13, 17]) plate(() => { ctx.beginPath(); ctx.arc(S[i].x, S[i].y, sc * 0.1, 0, Math.PI * 2); }, p,
+    metal(S[i].x - sc * 0.1, S[i].y, S[i].x + sc * 0.1, S[i].y, 1), "#ffb547", 1.2);
+  // palm emitter, brighter when a snap is armed
+  if (p > 0.3) {
+    const glowP = (h.det.armed ? 1 : 0.55 + 0.2 * Math.sin(t * 4)) * p, r = sc * 0.16;
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    const g = ctx.createRadialGradient(cen.x, cen.y, 0, cen.x, cen.y, r * 2.5);
+    g.addColorStop(0, `rgba(255,255,255,${glowP})`); g.addColorStop(0.3, `rgba(56,232,255,${glowP * 0.8})`); g.addColorStop(1, "rgba(56,232,255,0)");
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cen.x, cen.y, r * 2.5, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+  }
+}
+function drawHelmet(F, t, p) {
+  if (p <= 0) return;
+  const s = Math.max(F.w, F.h * 0.9);
+  ctx.save(); ctx.translate(F.cx, F.cy); ctx.rotate(F.ang);
+  const P = (x, y) => ({ x: x * s, y: y * s });
+  // shell
+  plate(() => {
+    ctx.beginPath(); ctx.ellipse(0, 0.05 * s, 0.7 * s, 0.95 * s, 0, Math.PI, 0);
+    [P(0.66, 0.42), P(0.48, 0.7), P(0.2, 0.86), P(-0.2, 0.86), P(-0.48, 0.7), P(-0.66, 0.42)].forEach((q) => ctx.lineTo(q.x, q.y));
+    ctx.closePath();
+  }, p, metal(-0.7 * s, 0, 0.7 * s, 0), "#38e8ff", 2.5);
+  // crest
+  plate(poly([P(0, -0.95), P(0.06, -0.9), P(0.04, -0.22), P(-0.04, -0.22), P(-0.06, -0.9)]), armorStage(0.6), metal(-0.06 * s, 0, 0.06 * s, 0, 1), "#ffb547", 1.5);
+  // ear modules
+  for (const sx of [-1, 1]) {
+    plate(() => { ctx.beginPath(); ctx.arc(sx * 0.7 * s, 0.05 * s, 0.13 * s, 0, Math.PI * 2); }, armorStage(0.6), metal(sx * 0.6 * s, 0, sx * 0.8 * s, 0, 1), "#ffb547", 1.5);
+    seam(P(sx * 0.36, 0.34), P(sx * 0.46, 0.48), armorStage(0.65)); seam(P(sx * 0.32, 0.42), P(sx * 0.42, 0.56), armorStage(0.65)); seam(P(sx * 0.28, 0.5), P(sx * 0.38, 0.64), armorStage(0.65));
+  }
+  // visor
+  const vp = armorStage(0.7);
+  if (vp > 0) {
+    const visor = poly([P(-0.62, -0.16), P(0.62, -0.16), P(0.54, 0.03), P(0.14, 0.06), P(0, 0.15), P(-0.14, 0.06), P(-0.54, 0.03)]);
+    ctx.save(); ctx.globalAlpha = vp; visor(); ctx.fillStyle = "#03060b"; ctx.fill();
+    ctx.clip();
+    const sx = ((t * 0.9) % 1.6 - 0.8) * s;
+    const g = ctx.createLinearGradient(sx - 0.25 * s, 0, sx + 0.25 * s, 0);
+    g.addColorStop(0, "rgba(56,232,255,0)"); g.addColorStop(0.5, "rgba(56,232,255,0.55)"); g.addColorStop(1, "rgba(56,232,255,0)");
+    ctx.fillStyle = g; ctx.fillRect(-s, -s, 2 * s, 2 * s);
+    ctx.fillStyle = "rgba(56,232,255,0.85)"; ctx.fillRect(-0.55 * s, -0.07 * s, 1.1 * s, 0.03 * s);
+    ctx.restore();
+    ctx.save(); ctx.globalAlpha = vp; visor(); ctx.strokeStyle = "#7ff0ff"; ctx.lineWidth = 2; ctx.shadowColor = "#38e8ff"; ctx.shadowBlur = 18; ctx.stroke(); ctx.restore();
+  }
+  seam(P(0, 0.2), P(0, 0.84), armorStage(0.65), "rgba(56,232,255,0.6)", 1.2);
+  ctx.restore();
+}
+
+/* ================================================================
+   HUD
+   ================================================================ */
+function setChip(el, on, text, warn = false) {
+  el.classList.toggle("on", on); el.classList.toggle("warn", warn); el.querySelector("span").textContent = text;
+}
+function updateHud(now) {
+  if (now - fpsT0 > 500) { const f = fpsN / ((now - fpsT0) / 1000); fps = fps ? lerp(fps, f, 0.5) : f; fpsT0 = now; fpsN = 0; }
+  $("#chipFps span").textContent = `${fps ? fps.toFixed(0) : "--"} FPS`;
+  setChip($("#chipRift"), rift.target, rift.target ? "ONLINE" : "OFFLINE");
+  setChip($("#chipArmor"), armor.target, armor.target ? (armor.p < 1 ? "ASSEMBLING" : "ONLINE") : "OFFLINE");
+  const faceOk = now - faceSeen < 600;
+  const fc = $("#chipFace"); fc.classList.add("ok");
+  setChip(fc, faceOk, faceOk ? "LOCKED" : (faceTask ? "SEARCHING" : "N/A"), !faceOk && rift.target);
+  const n = (hands.Left.present ? 1 : 0) + (hands.Right.present ? 1 : 0);
+  const hc = $("#chipHands"); hc.classList.add("ok"); setChip(hc, n > 0, String(n));
+  for (const side of ["Left", "Right"]) {
+    const h = hands[side], el = side === "Left" ? $("#mL") : $("#mR");
+    const m = h.present ? h.metrics : null;
+    el.querySelector(".st").textContent = !m ? "NO HAND" : h.det.armed ? "ARMED" : m.pinch < 0.5 ? "PINCH" : "OPEN";
+    el.querySelector(".bar div").style.width = m ? `${clamp(1 - (m.pinch - 0.15) / 1.0) * 100}%` : "0%";
+    el.querySelector(".act").textContent = m ? `pinch ${m.pinch.toFixed(2)} · curl ${m.curl.toFixed(2)}` : "pinch —";
+    el.classList.toggle("armed", !!(m && h.det.armed));
+  }
+  document.querySelectorAll("#controls .btn").forEach((b) => {
+    const a = b.dataset.act;
+    if (a === "rift") b.classList.toggle("on", rift.target);
+    if (a === "armor") b.classList.toggle("on", armor.target);
+    if (a === "skel") b.classList.toggle("on", settings.skeleton);
+    if (a === "easy") b.classList.toggle("on", settings.easy);
+    if (a === "swap") b.classList.toggle("on", settings.swap);
+    if (a === "sound") b.classList.toggle("on", settings.sound);
+  });
+}
+let toastTimer = 0;
+function showToast(main, sub) {
+  const el = $("#toast");
+  el.innerHTML = `${main}<small>${sub || ""}</small>`;
+  el.style.color = /RIFT/.test(main) ? "#d9a6ff" : /ARMOR/.test(main) ? "#ffcf86" : "#bff6ff";
+  el.style.textShadow = `0 0 24px ${/RIFT/.test(main) ? "#a24bff" : /ARMOR/.test(main) ? "#ffb547" : "#38e8ff"}`;
+  el.classList.remove("show"); void el.offsetWidth; el.classList.add("show");
+}
+
+/* ================================================================
+   Controls
+   ================================================================ */
+function act(a) {
+  if (!document.body.classList.contains("live")) return;
+  const center = faceS ? { x: faceS.cx, y: faceS.cy + faceS.h } : { x: W / 2, y: H / 2 };
+  switch (a) {
+    case "rift": sfx.snap(); toggleRift(hands.Right.pts ? handPoint("Right") : center); break;
+    case "armor": sfx.snap(); toggleArmor(hands.Left.pts ? handPoint("Left") : center); break;
+    case "skel": settings.skeleton = !settings.skeleton; break;
+    case "easy": settings.easy = !settings.easy; showToast(settings.easy ? "EASY SNAP" : "STRICT SNAP", settings.easy ? "a quick pinch-release is enough" : "pinch, then flick middle finger into palm"); break;
+    case "swap": settings.swap = !settings.swap; showToast("HANDS SWAPPED", "left ↔ right detection inverted"); break;
+    case "sound": settings.sound = !settings.sound; if (!settings.sound) stopDrone(); else if (rift.target) startDrone(); break;
+    case "full": (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen()).catch(() => {}); break;
+  }
+  updateHud(performance.now());
+}
+document.querySelectorAll("#controls .btn").forEach((b) => b.addEventListener("click", () => act(b.dataset.act)));
+addEventListener("keydown", (e) => {
+  if (e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+  const map = { r: "rift", a: "armor", h: "skel", e: "easy", s: "swap", m: "sound", f: "full" };
+  const a = map[e.key.toLowerCase()]; if (a) { e.preventDefault(); act(a); }
+});
+</script>
+</body>
+</html>
